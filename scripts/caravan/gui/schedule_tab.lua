@@ -139,11 +139,18 @@ end
 
 function P.build_schedule_tab(parent, caravan_data)
     local schedule_tab = parent.add {type = "tab", name = "schedule_tab", caption = "Schedule"}
-    local schedule_pane = P.build_schedule_pane(parent, caravan_data)
+    local schedule_container = parent.add {type = "flow", name = "schedule_container", direction = "vertical"}
+    schedule_container.style.horizontally_stretchable = true
+    schedule_container.style.vertically_stretchable = true
+
+    AddInterruptGui.build_name_quick_set_flow(schedule_container, {unit_number = caravan_data.unit_number})
+
+    local schedule_pane = P.build_schedule_pane(schedule_container, caravan_data)
     schedule_pane.style.right_margin = 12
     schedule_pane.style.left_margin = 12
     schedule_pane.style.bottom_margin = 8
-    parent.add_tab(schedule_tab, schedule_pane)
+    schedule_pane.style.top_margin = 4
+    parent.add_tab(schedule_tab, schedule_container)
     return schedule_tab
 end
 
@@ -152,7 +159,7 @@ function P.update_schedule_pane(player)
     if not gui then return end
 
     local caravan_data = storage.caravans[gui.tags.unit_number]
-    local schedule_pane = gui.entity_frame.tabbed_pane_frame.tabbed_pane.schedule_pane 
+    local schedule_pane = gui.entity_frame.tabbed_pane_frame.tabbed_pane.schedule_container.schedule_pane
 
     schedule_pane.schedule_flow.destroy()
     P.build_schedule_flow(schedule_pane, caravan_data)

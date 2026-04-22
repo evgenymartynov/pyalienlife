@@ -43,6 +43,58 @@ function P.build_text_input(parent, tags)
     return frame
 end
 
+function P.build_name_quick_set_flow(parent, tags)
+    local caravan_data = storage.caravans[tags.unit_number]
+    local is_fluid_caravan = caravan_data and caravan_data.entity and caravan_data.entity.valid
+        and Utils.entity_name_is_fluid_caravan(caravan_data.entity.name)
+
+    local qs_wrapper = parent.add {type = "flow", name = "py_add_interrupt_quick_setup_wrapper", direction = "vertical"}
+    qs_wrapper.style.left_margin = 12
+
+    qs_wrapper.add {type = "label", caption = "Quick setup", style = "semibold_label"}
+
+    local flow = qs_wrapper.add {type = "flow", name = "py_add_interrupt_name_quick_flow", direction = "horizontal"}
+    flow.style.vertical_align = "center"
+    flow.style.horizontal_spacing = 6
+    flow.style.bottom_margin = 4
+
+    if is_fluid_caravan then
+        flow.add {
+            type = "choose-elem-button",
+            name = "py_add_interrupt_name_fluid_button",
+            style = "slot_sized_button",
+            elem_type = "fluid",
+            tags = tags,
+        }
+    else
+        flow.add {
+            type = "choose-elem-button",
+            name = "py_add_interrupt_name_item_button",
+            style = "slot_sized_button",
+            elem_type = "item",
+            tags = tags,
+        }
+    end
+
+    local count_field = flow.add {
+        type = "textfield",
+        name = "py_add_interrupt_name_count_textfield",
+        style = "slider_value_textfield",
+        tags = tags,
+    }
+    count_field.style.width = 80
+    count_field.numeric = true
+    count_field.text = ""
+
+    flow.add {
+        type = "sprite-button",
+        name = "py_add_interrupt_name_quick_confirm_button",
+        style = "item_and_count_select_confirm",
+        sprite = "utility/enter",
+        tags = tags,
+    }
+end
+
 function P.build_no_interrupts_frame(parent)
     local frame = parent.add {type = "frame", style = "negative_subheader_frame"}
     local flow = frame.add {type = "flow"}
@@ -94,6 +146,7 @@ function P.build(parent, caravan_data, cursor_location)
     P.build_title_bar_flow(main_frame, tags)
 
     local contents_frame = main_frame.add {type = "frame", name = "contents_frame", style = "inside_deep_frame", direction = "vertical", tags = tags}
+    P.build_name_quick_set_flow(contents_frame, tags)
     P.build_text_input(contents_frame, tags)
 
     local scroll_pane = contents_frame.add {type = "scroll-pane", name = "scroll_pane", style = "list_box_scroll_pane", tags = tags}
