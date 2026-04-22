@@ -73,9 +73,44 @@ local function pickerdollies()
     end
 end
 
+local function translate_all_items_and_fluids(player)
+    storage.item_and_fluid_locale = storage.item_and_fluid_locale or {}
+    storage.item_and_fluid_locale.temp = storage.item_and_fluid_locale.temp or {}
+    storage.item_and_fluid_locale[player.locale] = storage.item_and_fluid_locale[player.locale] or {}
+
+    for name, proto in pairs(prototypes.item) do
+        local id = player.request_translation(proto.localised_name)
+        storage.item_and_fluid_locale.temp[id] = name
+    end
+    for name, proto in pairs(prototypes.fluid) do
+        local id = player.request_translation(proto.localised_name)
+        storage.item_and_fluid_locale.temp[id] = name
+    end
+end
+
+local function ensure_item_and_fluid_locale_for_player(player)
+    storage.item_and_fluid_locale = storage.item_and_fluid_locale or {}
+    storage.item_and_fluid_locale.temp = storage.item_and_fluid_locale.temp or {}
+    local locale_store = storage.item_and_fluid_locale[player.locale]
+    if not locale_store or next(locale_store) == nil then
+        translate_all_items_and_fluids(player)
+    end
+end
+
+py.get_localised_item_or_fluid_name = function(player, name)
+    ensure_item_and_fluid_locale_for_player(player)
+    local locale_store = (storage.item_and_fluid_locale or {})[player.locale] or {}
+    return locale_store[name] or name
+end
+
 py.on_event(py.events.on_init(), function()
     discoscience()
     pickerdollies()
+    storage.item_and_fluid_locale = {}
+    storage.item_and_fluid_locale.temp = {}
+    for _, player in pairs(game.players) do
+        translate_all_items_and_fluids(player)
+    end
     if remote.interfaces["freeplay"] then
         local created_items = remote.call("freeplay", "get_created_items")
         created_items["firearm-magazine"] = 500
@@ -84,6 +119,48 @@ py.on_event(py.events.on_init(), function()
         local ship_items = remote.call("freeplay", "get_ship_items")
         ship_items["iron-chest"] = 5
         remote.call("freeplay", "set_ship_items", ship_items)
+    end
+end)
+
+py.on_event(defines.events.on_configuration_changed, function()
+    storage.item_and_fluid_locale = {}
+    storage.item_and_fluid_locale.temp = {}
+    for _, player in pairs(game.players) do
+        translate_all_items_and_fluids(player)
+    end
+end)
+
+py.on_event(defines.events.on_player_created, function(event)
+    local player = game.get_player(event.player_index)
+    if player then
+        ensure_item_and_fluid_locale_for_player(player)
+    end
+end)
+
+py.on_event(defines.events.on_player_locale_changed, function(event)
+    local player = game.get_player(event.player_index)
+    if player then
+        ensure_item_and_fluid_locale_for_player(player)
+    end
+end)
+
+py.on_event(defines.events.on_string_translated, function(event)
+    if not event.translated then return end
+    if not storage.item_and_fluid_locale or not storage.item_and_fluid_locale.temp then return end
+
+    local name = storage.item_and_fluid_locale.temp[event.id]
+    local player = game.get_player(event.player_index)
+    if name and player then
+        local locale = player.locale
+        storage.item_and_fluid_locale[locale] = storage.item_and_fluid_locale[locale] or {}
+        storage.item_and_fluid_locale[locale][name] = event.result
+
+        local k = next(storage.item_and_fluid_locale.temp, event.id)
+        if k == nil then
+            storage.item_and_fluid_locale.temp = {}
+        else
+            storage.item_and_fluid_locale.temp[event.id] = nil
+        end
     end
 end)
 

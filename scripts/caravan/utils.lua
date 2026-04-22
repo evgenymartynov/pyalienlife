@@ -47,6 +47,97 @@ function P.get_name(caravan_data)
     return random_name
 end
 
+function P.entity_name_is_fluid_caravan(entity_name)
+    return type(entity_name) == "string" and entity_name:find("^fluidavan") ~= nil
+end
+
+---Caravan land/aerial outpost chest inventory only.
+---@param entity LuaEntity
+---@return LuaInventory?
+function P.try_get_outpost_item_inventory(entity)
+    if not entity or not entity.valid then return nil end
+    if entity.type == "container" then
+        return entity.get_inventory(defines.inventory.chest)
+    end
+    return nil
+end
+
+---Item land / aerial outpost on the player's surface and force with the highest amount of the item.
+---@param player LuaPlayer
+---@param item_name string
+---@param quality string
+---@return LuaEntity?
+function P.find_outpost_with_largest_item_count(player, item_name, quality)
+    local item_filter = quality == "normal" and item_name or {name = item_name, quality = quality}
+    local best_entity, best_count = nil, 0
+    for _, ent in pairs(player.surface.find_entities_filtered {
+        name = {"outpost", "outpost-aerial"},
+        force = player.force,
+    }) do
+        local inv = P.try_get_outpost_item_inventory(ent)
+        if inv then
+            local count = inv.get_item_count(item_filter)
+            if count > best_count then
+                best_count = count
+                best_entity = ent
+            end
+        end
+    end
+    return best_entity
+end
+
+---@param entity LuaEntity
+---@param fluid_name string
+---@return number
+function P.try_get_outpost_fluid_amount(entity, fluid_name)
+    if not entity or not entity.valid then return 0 end
+    if entity.name ~= "outpost-fluid" and entity.name ~= "outpost-aerial-fluid" then
+        return 0
+    end
+    return entity.get_fluid_count(fluid_name)
+end
+
+---Fluid land / aerial outpost on the player's surface and force with the most of that fluid (nil if none hold any).
+---@param player LuaPlayer
+---@param fluid_name string
+---@return LuaEntity?
+function P.find_fluid_outpost_with_largest_fluid_amount(player, fluid_name)
+    local best_entity, best_amount = nil, 0
+    for _, ent in pairs(player.surface.find_entities_filtered {
+        name = {"outpost-fluid", "outpost-aerial-fluid"},
+        force = player.force,
+    }) do
+        local amount = P.try_get_outpost_fluid_amount(ent, fluid_name)
+        if amount > best_amount then
+            best_amount = amount
+            best_entity = ent
+        end
+    end
+    return best_entity
+end
+
+---Nearest fluid land / aerial outpost to the given entity (nil if none exist).
+---@param caravan_entity LuaEntity
+---@param player LuaPlayer
+---@return LuaEntity?
+function P.find_nearest_fluid_outpost(caravan_entity, player)
+    local pos = caravan_entity.position
+    local best_entity, best_dist_sq = nil, math.huge
+    for _, ent in pairs(player.surface.find_entities_filtered {
+        name = {"outpost-fluid", "outpost-aerial-fluid"},
+        force = player.force,
+    }) do
+        local dx = ent.position.x - pos.x
+        local dy = ent.position.y - pos.y
+        local dist_sq = dx * dx + dy * dy
+        if dist_sq < best_dist_sq then
+            best_dist_sq = dist_sq
+            best_entity = ent
+        end
+    end
+    return best_entity
+end
+
 ---Accepts a condition or action and returns the relevant label
 function P.label_info(schedule_entry)
     if not schedule_entry then return nil, nil, nil end

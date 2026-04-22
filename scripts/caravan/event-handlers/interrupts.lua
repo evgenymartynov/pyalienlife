@@ -169,6 +169,243 @@ gui_events[defines.events.on_gui_click]["py_edit_interrupt_checkbox"] = function
     storage.edited_interrupts[event.player_index].inside_interrupt = event.element.state
 end
 
+local function parse_item_elem_value(elem_value)
+    if not elem_value then return nil, nil end
+    if type(elem_value) == "string" then
+        return elem_value, "normal"
+    end
+    if type(elem_value) == "table" and elem_value.name then
+        return elem_value.name, elem_value.quality or "normal"
+    end
+    return nil, nil
+end
+
+local function translate_item_and_fluid_name(player, name)
+    if py.get_localised_item_or_fluid_name then
+        return py.get_localised_item_or_fluid_name(player, name)
+    end
+    local locale_store = (storage.item_and_fluid_locale or {})[player.locale] or {}
+    return locale_store[name] or name
+end
+
+local function build_interrupt_name_from_item_and_count(player, item_name, quality, count)
+    local translated_name = translate_item_and_fluid_name(player, item_name)
+    if quality == "normal" then
+        return string.format("[item=%s] %s %d", item_name, translated_name, count)
+    end
+    return string.format("[item=%s,quality=%s] %s %d", item_name, quality, translated_name, count)
+end
+
+local function build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
+    local translated_name = translate_item_and_fluid_name(player, fluid_name)
+    return string.format("[fluid=%s] %s %d", fluid_name, translated_name, count)
+end
+
+gui_events[defines.events.on_gui_elem_changed]["py_add_interrupt_name_item_button"] = function(event)
+    local row = event.element.parent
+    local count_field = row.py_add_interrupt_name_count_textfield
+    if event.element.elem_value then
+        local item_name = parse_item_elem_value(event.element.elem_value)
+        if item_name and count_field and count_field.valid then
+            local proto = prototypes.item[item_name]
+            if proto then
+                count_field.text = tostring(proto.stack_size)
+            end
+        end
+    end
+end
+
+gui_events[defines.events.on_gui_elem_changed]["py_add_interrupt_name_fluid_button"] = function(event)
+    local row = event.element.parent
+    local count_field = row.py_add_interrupt_name_count_textfield
+    if event.element.elem_value and count_field and count_field.valid then
+        count_field.text = "5000"
+    end
+end
+
+gui_events[defines.events.on_gui_click]["py_add_interrupt_name_quick_confirm_button"] = function(event)
+    local player = game.get_player(event.player_index)
+    local tags = event.element.tags
+    local caravan_data = storage.caravans[tags.unit_number]
+    if not caravan_data then return end
+
+    local row = event.element.parent
+    local item_button = row.py_add_interrupt_name_item_button
+    local fluid_button = row.py_add_interrupt_name_fluid_button
+    local count_field = row.py_add_interrupt_name_count_textfield
+
+    local item_name, quality
+    if item_button and item_button.valid then
+        item_name, quality = parse_item_elem_value(item_button.elem_value)
+    end
+
+    local fluid_name
+    if fluid_button and fluid_button.valid then
+        fluid_name = parse_item_elem_value(fluid_button.elem_value)
+    end
+
+    local count = math.floor(tonumber(count_field.text) or 0)
+    if count < 1 then
+        player.play_sound {path = "utility/cannot_build"}
+        return
+    end
+    if count > 2147483647 then
+        count = 2147483647
+    end
+
+    local new_name
+    local from_item_quick = false
+    local from_fluid_quick = false
+    if item_name and prototypes.item[item_name] then
+        new_name = build_interrupt_name_from_item_and_count(player, item_name, quality, count)
+        from_item_quick = true
+    elseif fluid_name and prototypes.fluid[fluid_name] then
+        new_name = build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
+        from_fluid_quick = true
+    else
+        player.play_sound {path = "utility/cannot_build"}
+        return
+    end
+
+    if table.invert(caravan_data.interrupts)[new_name] ~= nil then
+        player.play_sound {path = "utility/cannot_build"}
+        return
+    end
+
+    local is_new = not storage.interrupts[new_name]
+    if is_new then
+        storage.interrupts[new_name] = {
+            name = new_name,
+            conditions = {},
+            conditions_operators = {},
+            schedule = {},
+            inside_interrupt = false,
+        }
+    end
+
+    local interrupt = storage.interrupts[new_name]
+    local quick_pick_station
+
+    if is_new then
+        if from_item_quick then
+            local elem_value = quality == "normal" and item_name or {name = item_name, quality = quality}
+            table.insert(
+                interrupt.conditions,
+                CaravanUtils.ensure_item_count {
+                    type = "caravan-item-count",
+                    localised_name = {"caravan-actions.caravan-item-count", "caravan-item-count"},
+                    elem_value = elem_value,
+                    item_count = 0,
+                    operator = 3,
+                }
+            )
+
+            quick_pick_station = CaravanUtils.find_outpost_with_largest_item_count(player, item_name, quality)
+            if quick_pick_station and quick_pick_station.valid then
+                local load_action = CaravanUtils.ensure_item_count {
+                    type = "load-caravan",
+                    localised_name = {"caravan-actions.load-caravan", "load-caravan"},
+                    elem_value = elem_value,
+                    item_count = count,
+                }
+                table.insert(interrupt.schedule, {
+                    localised_name = {
+                        "caravan-gui.entity-position",
+                        quick_pick_station.prototype.localised_name,
+                        math.floor(quick_pick_station.position.x),
+                        math.floor(quick_pick_station.position.y),
+                    },
+                    entity = quick_pick_station,
+                    position = quick_pick_station.position,
+                    player_index = nil,
+                    actions = {load_action},
+                })
+            end
+        elseif from_fluid_quick then
+            table.insert(
+                interrupt.conditions,
+                CaravanUtils.ensure_item_count {
+                    type = "caravan-fluid-count",
+                    localised_name = {"caravan-actions.caravan-fluid-count", "caravan-fluid-count"},
+                    elem_value = fluid_name,
+                    item_count = 0,
+                    operator = 3,
+                }
+            )
+
+            quick_pick_station = CaravanUtils.find_fluid_outpost_with_largest_fluid_amount(player, fluid_name)
+            if quick_pick_station and quick_pick_station.valid then
+                local fill_action = CaravanUtils.ensure_item_count {
+                    type = "fill-tank-until-caravan-has",
+                    localised_name = {"caravan-actions.fill-tank-until-caravan-has", "fill-tank-until-caravan-has"},
+                    elem_value = fluid_name,
+                    item_count = count,
+                }
+                table.insert(interrupt.schedule, {
+                    localised_name = {
+                        "caravan-gui.entity-position",
+                        quick_pick_station.prototype.localised_name,
+                        math.floor(quick_pick_station.position.x),
+                        math.floor(quick_pick_station.position.y),
+                    },
+                    entity = quick_pick_station,
+                    position = quick_pick_station.position,
+                    player_index = nil,
+                    actions = {fill_action},
+                })
+            end
+        end
+    end
+
+    if from_fluid_quick and caravan_data.entity and caravan_data.entity.valid then
+        local nearest_outpost = CaravanUtils.find_nearest_fluid_outpost(caravan_data.entity, player)
+        if nearest_outpost and nearest_outpost.valid then
+            local empty_action = CaravanUtils.ensure_item_count {
+                type = "empty-tank-until-target-has",
+                localised_name = {"caravan-actions.empty-tank-until-target-has", "empty-tank-until-target-has"},
+                elem_value = fluid_name,
+                item_count = count,
+            }
+            local wait_action = CaravanUtils.ensure_item_count {
+                type = "time-passed",
+                localised_name = {"caravan-actions.time-passed", "time-passed"},
+                wait_time = 120,
+            }
+            table.insert(caravan_data.schedule, {
+                localised_name = {
+                    "caravan-gui.entity-position",
+                    nearest_outpost.prototype.localised_name,
+                    math.floor(nearest_outpost.position.x),
+                    math.floor(nearest_outpost.position.y),
+                },
+                entity = nearest_outpost,
+                position = nearest_outpost.position,
+                player_index = nil,
+                actions = {empty_action, wait_action},
+            })
+        end
+    end
+
+    table.insert(caravan_data.interrupts, new_name)
+
+    local window_location = {0, 0}
+    if player.gui.screen.add_interrupt_gui then
+        window_location = player.gui.screen.add_interrupt_gui.location
+        player.gui.screen.add_interrupt_gui.destroy()
+    end
+    CaravanScheduleGui.update_schedule_pane(player)
+
+    local edit_interrupt_gui = EditInterruptGui.build(player.gui.screen, storage.interrupts[new_name])
+    CaravanUtils.restore_gui_location(edit_interrupt_gui, window_location)
+
+    if quick_pick_station and quick_pick_station.valid then
+        local caravan_gui = CaravanGui.get_gui(player)
+        if caravan_gui then
+            CaravanGui.refocus(caravan_gui, quick_pick_station)
+        end
+    end
+end
+
 gui_events[defines.events.on_gui_selection_state_changed]["py_edit_interrupt_add_condition_drop_down"] = function(event)
     local player = game.get_player(event.player_index)
     local action_id = event.element.selected_index
