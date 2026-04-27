@@ -169,43 +169,11 @@ gui_events[defines.events.on_gui_click]["py_edit_interrupt_checkbox"] = function
     storage.edited_interrupts[event.player_index].inside_interrupt = event.element.state
 end
 
-local function parse_item_elem_value(elem_value)
-    if not elem_value then return nil, nil end
-    if type(elem_value) == "string" then
-        return elem_value, "normal"
-    end
-    if type(elem_value) == "table" and elem_value.name then
-        return elem_value.name, elem_value.quality or "normal"
-    end
-    return nil, nil
-end
-
-local function translate_item_and_fluid_name(player, name)
-    if py.get_localised_item_or_fluid_name then
-        return py.get_localised_item_or_fluid_name(player, name)
-    end
-    local locale_store = (storage.item_and_fluid_locale or {})[player.locale] or {}
-    return locale_store[name] or name
-end
-
-local function build_interrupt_name_from_item_and_count(player, item_name, quality, count)
-    local translated_name = translate_item_and_fluid_name(player, item_name)
-    if quality == "normal" then
-        return string.format("[item=%s] %s %d", item_name, translated_name, count)
-    end
-    return string.format("[item=%s,quality=%s] %s %d", item_name, quality, translated_name, count)
-end
-
-local function build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
-    local translated_name = translate_item_and_fluid_name(player, fluid_name)
-    return string.format("[fluid=%s] %s %d", fluid_name, translated_name, count)
-end
-
 gui_events[defines.events.on_gui_elem_changed]["py_add_interrupt_name_item_button"] = function(event)
     local row = event.element.parent
     local count_field = row.py_add_interrupt_name_count_textfield
     if event.element.elem_value then
-        local item_name = parse_item_elem_value(event.element.elem_value)
+        local item_name = CaravanUtils.parse_item_elem_value(event.element.elem_value)
         if item_name and count_field and count_field.valid then
             local proto = prototypes.item[item_name]
             if proto then
@@ -236,12 +204,12 @@ gui_events[defines.events.on_gui_click]["py_add_interrupt_name_quick_confirm_but
 
     local item_name, quality
     if item_button and item_button.valid then
-        item_name, quality = parse_item_elem_value(item_button.elem_value)
+        item_name, quality = CaravanUtils.parse_item_elem_value(item_button.elem_value)
     end
 
     local fluid_name
     if fluid_button and fluid_button.valid then
-        fluid_name = parse_item_elem_value(fluid_button.elem_value)
+        fluid_name = CaravanUtils.parse_item_elem_value(fluid_button.elem_value)
     end
 
     local count = math.floor(tonumber(count_field.text) or 0)
@@ -257,10 +225,10 @@ gui_events[defines.events.on_gui_click]["py_add_interrupt_name_quick_confirm_but
     local from_item_quick = false
     local from_fluid_quick = false
     if item_name and prototypes.item[item_name] then
-        new_name = build_interrupt_name_from_item_and_count(player, item_name, quality, count)
+        new_name = CaravanUtils.build_interrupt_name_from_item_and_count(player, item_name, quality, count)
         from_item_quick = true
     elseif fluid_name and prototypes.fluid[fluid_name] then
-        new_name = build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
+        new_name = CaravanUtils.build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
         from_fluid_quick = true
     else
         player.play_sound {path = "utility/cannot_build"}
@@ -272,56 +240,23 @@ gui_events[defines.events.on_gui_click]["py_add_interrupt_name_quick_confirm_but
         return
     end
 
-    local is_new = not storage.interrupts[new_name]
-    if is_new then
-        storage.interrupts[new_name] = {
-            name = new_name,
-            conditions = {},
-            conditions_operators = {},
-            schedule = {},
-            inside_interrupt = false,
-        }
-    end
-
-    local interrupt = storage.interrupts[new_name]
     local quick_pick_station
+    local is_new
 
-    if is_new then
-        if from_item_quick then
-            local elem_value = quality == "normal" and item_name or {name = item_name, quality = quality}
-            table.insert(
-                interrupt.conditions,
-                CaravanUtils.ensure_item_count {
-                    type = "caravan-item-count",
-                    localised_name = {"caravan-actions.caravan-item-count", "caravan-item-count"},
-                    elem_value = elem_value,
-                    item_count = 0,
-                    operator = 3,
-                }
-            )
+    if from_item_quick then
+        new_name, is_new, quick_pick_station = CaravanUtils.ensure_item_quick_setup_interrupt(player, item_name, quality, count)
+    else
+        is_new = not storage.interrupts[new_name]
+        if is_new then
+            storage.interrupts[new_name] = {
+                name = new_name,
+                conditions = {},
+                conditions_operators = {},
+                schedule = {},
+                inside_interrupt = false,
+            }
 
-            quick_pick_station = CaravanUtils.find_outpost_with_largest_item_count(player, item_name, quality)
-            if quick_pick_station and quick_pick_station.valid then
-                local load_action = CaravanUtils.ensure_item_count {
-                    type = "load-caravan",
-                    localised_name = {"caravan-actions.load-caravan", "load-caravan"},
-                    elem_value = elem_value,
-                    item_count = count,
-                }
-                table.insert(interrupt.schedule, {
-                    localised_name = {
-                        "caravan-gui.entity-position",
-                        quick_pick_station.prototype.localised_name,
-                        math.floor(quick_pick_station.position.x),
-                        math.floor(quick_pick_station.position.y),
-                    },
-                    entity = quick_pick_station,
-                    position = quick_pick_station.position,
-                    player_index = nil,
-                    actions = {load_action},
-                })
-            end
-        elseif from_fluid_quick then
+            local interrupt = storage.interrupts[new_name]
             table.insert(
                 interrupt.conditions,
                 CaravanUtils.ensure_item_count {
