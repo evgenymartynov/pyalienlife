@@ -1,5 +1,6 @@
 local CaravanImpl = require "__pyalienlife__/scripts/caravan/impl"
 local CaravanGui = require "__pyalienlife__/scripts/caravan/gui"
+local CaravanGuiComponents = require "__pyalienlife__/scripts/caravan/gui/components"
 local EditInterruptGui = require "__pyalienlife__/scripts/caravan/gui/edit_interrupt"
 local Utils = require "__pyalienlife__/scripts/caravan/utils"
 
@@ -129,12 +130,73 @@ py.on_event(defines.events.on_player_cursor_stack_changed, function(event)
     storage.last_opened[event.player_index] = nil
 end)
 
+---Aggregates inventory filters of an item-outpost into per-player setup state and refreshes the schedule pane.
+---Plays utility/cannot_build (and bails) for invalid targets or empty filter sets.
+local function start_outpost_setup(player, entity, caravan_unit_number)
+    if not entity or not entity.valid or not Utils.entity_name_is_item_outpost(entity.name) then
+        player.play_sound {path = "utility/cannot_build"}
+        return
+    end
+
+    local inventory = Utils.try_get_outpost_item_inventory(entity)
+    if not inventory then
+        player.play_sound {path = "utility/cannot_build"}
+        return
+    end
+
+    local totals = {}
+    for slot_index = 1, #inventory do
+        local filter = inventory.get_filter(slot_index)
+        if filter then
+            local item_name = type(filter) == "string" and filter or filter.name
+            if item_name then
+                local item_prototype = prototypes.item[item_name]
+                if item_prototype then
+                    totals[item_name] = (totals[item_name] or 0) + item_prototype.stack_size
+                end
+            end
+        end
+    end
+
+    local items = {}
+    for item_name, count in pairs(totals) do
+        items[#items + 1] = {name = item_name, count = count, enabled = true}
+    end
+    if #items == 0 then
+        player.play_sound {path = "utility/cannot_build"}
+        return
+    end
+    table.sort(items, function(a, b) return a.name < b.name end)
+
+    storage.outpost_setup = storage.outpost_setup or {}
+    storage.outpost_setup[player.index] = {
+        caravan_unit_number = caravan_unit_number,
+        outpost = entity,
+        items = items,
+    }
+
+    CaravanGuiComponents.update_schedule_pane(player)
+end
+
 --- Called whenever the player uses the carrot-on-stick capsule item.
 local function on_carrot_used(player, cursor_position)
     player.clear_cursor()
 
     local schedule, prototype, only_outpost
     local last_opened = storage.last_opened[player.index]
+    if not last_opened then return end
+
+    local entity = player.selected or player.surface.find_entities_filtered {
+        position = cursor_position,
+        limit = 1,
+        collision_mask = {object = true, player = true, train = true, resource = true, floor = true, transport_belt = true, ghost = true}
+    }[1]
+
+    if last_opened.read_outpost_inventory_filters then
+        start_outpost_setup(player, entity, last_opened.caravan)
+        return
+    end
+
     local caravan_data = storage.caravans[last_opened.caravan]
     local interrupt_data = storage.edited_interrupts[player.index]
     if caravan_data then
@@ -146,12 +208,6 @@ local function on_carrot_used(player, cursor_position)
     if interrupt_data then
         schedule = interrupt_data.schedule
     end
-
-    local entity = player.selected or player.surface.find_entities_filtered {
-        position = cursor_position,
-        limit = 1,
-        collision_mask = {object = true, player = true, train = true, resource = true, floor = true, transport_belt = true, ghost = true}
-    }[1]
 
     if last_opened.action_id then
         -- Last opened is an interrupt condition

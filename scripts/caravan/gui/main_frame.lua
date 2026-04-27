@@ -118,6 +118,10 @@ gui_events[defines.events.on_gui_click]["py_caravan_close_button"] = function(ev
         player.gui.screen.caravan_gui.destroy()
     end
 
+    if storage.outpost_setup then
+        storage.outpost_setup[event.player_index] = nil
+    end
+
     player.opened = nil
 end
 
@@ -128,6 +132,11 @@ gui_events[defines.events.on_gui_selected_tab_changed]["tabbed_pane"] = function
 
     if not tab_pane then return end
     storage.last_opened_tab[event.player_index] = tab_pane.selected_tab_index
+
+    if storage.outpost_setup and storage.outpost_setup[event.player_index] then
+        storage.outpost_setup[event.player_index] = nil
+        CaravanGuiComponents.update_schedule_pane(player)
+    end
 end
 
 return P

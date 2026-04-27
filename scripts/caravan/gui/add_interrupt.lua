@@ -41,7 +41,8 @@ function P.build_text_input(parent, tags)
     return frame
 end
 
-function P.build_name_quick_set_flow(parent, tags)
+function P.build_name_quick_set_flow(parent, tags, opts)
+    opts = opts or {}
     local caravan_data = storage.caravans[tags.unit_number]
     local is_fluid_caravan = caravan_data and caravan_data.entity and caravan_data.entity.valid
         and Utils.entity_name_is_fluid_caravan(caravan_data.entity.name)
@@ -91,6 +92,17 @@ function P.build_name_quick_set_flow(parent, tags)
         sprite = "utility/enter",
         tags = tags,
     }
+
+    if opts.show_outpost_filter_reader and not is_fluid_caravan then
+        flow.add {
+            type = "sprite-button",
+            name = "py_caravan_quick_setup_read_outpost_filters_button",
+            style = "item_and_count_select_confirm",
+            sprite = "utility/search",
+            tags = tags,
+            tooltip = {"caravan-gui.add-outpost"},
+        }
+    end
 end
 
 function P.build_no_interrupts_frame(parent)
