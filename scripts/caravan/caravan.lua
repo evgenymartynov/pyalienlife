@@ -5,6 +5,7 @@ require "event-handlers/destination"
 require "event-handlers/action"
 require "event-handlers/subheader_buttons"
 require "event-handlers/interrupts"
+require "event-handlers/outpost_setup"
 
 require "manager"
 
@@ -17,6 +18,7 @@ py.on_event(py.events.on_init(), function()
     storage.make_operable_next_tick = storage.make_operable_next_tick or {}
     storage.edited_interrupts = storage.edited_interrupts or {}
     storage.gui_locations = storage.gui_locations or {}
+    storage.outpost_setup = storage.outpost_setup or {}
 end)
 
 -- clear UI location storage if a player changes their display settings

@@ -26,6 +26,26 @@ gui_events[defines.events.on_gui_click]["py_caravan_destination_add_button"] = f
     CaravanImpl.select_destination(player, last_opened, player.position)
 end
 
+gui_events[defines.events.on_gui_click]["py_caravan_quick_setup_read_outpost_filters_button"] = function(event)
+    local player = game.get_player(event.player_index) ---@cast player LuaPlayer
+    local unit_number = event.element.tags.unit_number
+    local caravan_data = storage.caravans[unit_number]
+    if not caravan_data or not caravan_data.entity or not caravan_data.entity.valid then return end
+    if CaravanUtils.entity_name_is_fluid_caravan(caravan_data.entity.name) then
+        player.play_sound {path = "utility/cannot_build"}
+        return
+    end
+
+    if storage.outpost_setup then
+        storage.outpost_setup[event.player_index] = nil
+    end
+
+    CaravanImpl.select_destination(player, {
+        caravan = unit_number,
+        read_outpost_inventory_filters = true,
+    }, player.position)
+end
+
 gui_events[defines.events.on_gui_click]["py_caravan_destination_move_up_button"] = function(event)
     local unit_number = event.element.tags.unit_number
     local caravan_data = storage.caravans[unit_number]

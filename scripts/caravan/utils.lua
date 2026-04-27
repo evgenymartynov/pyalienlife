@@ -10,9 +10,9 @@ function P.get_valid_actions_for_entity(caravan_entity_name, entity)
     local all_actions = prototype.actions
     local valid_actions
     if entity and entity.valid then
-        if entity.name == "outpost" or entity.name == "outpost-aerial" then
+        if P.entity_name_is_item_outpost(entity.name) then
             valid_actions = all_actions.outpost
-        elseif entity.name == "outpost-fluid" or entity.name == "outpost-aerial-fluid" then
+        elseif P.entity_name_is_fluid_outpost(entity.name) then
             valid_actions = all_actions["outpost-fluid"]
         else
             valid_actions = all_actions[entity.type]
@@ -26,9 +26,9 @@ function P.get_all_actions_for_entity(entity)
     local all_actions = Caravan.all_actions
     local valid_actions
     if entity and entity.valid then
-        if entity.name == "outpost" or entity.name == "outpost-aerial" then
+        if P.entity_name_is_item_outpost(entity.name) then
             valid_actions = all_actions.outpost
-        elseif entity.name == "outpost-fluid" or entity.name == "outpost-aerial-fluid" then
+        elseif P.entity_name_is_fluid_outpost(entity.name) then
             valid_actions = all_actions["outpost-fluid"]
         else
             valid_actions = all_actions[entity.type]
@@ -49,6 +49,14 @@ end
 
 function P.entity_name_is_fluid_caravan(entity_name)
     return type(entity_name) == "string" and entity_name:find("^fluidavan") ~= nil
+end
+
+function P.entity_name_is_item_outpost(entity_name)
+    return entity_name == "outpost" or entity_name == "outpost-aerial"
+end
+
+function P.entity_name_is_fluid_outpost(entity_name)
+    return entity_name == "outpost-fluid" or entity_name == "outpost-aerial-fluid"
 end
 
 ---Caravan land/aerial outpost chest inventory only.
@@ -91,7 +99,7 @@ end
 ---@return number
 function P.try_get_outpost_fluid_amount(entity, fluid_name)
     if not entity or not entity.valid then return 0 end
-    if entity.name ~= "outpost-fluid" and entity.name ~= "outpost-aerial-fluid" then
+    if not P.entity_name_is_fluid_outpost(entity.name) then
         return 0
     end
     return entity.get_fluid_count(fluid_name)
@@ -389,6 +397,120 @@ function P.rename_interrupt(interrupt, new_name)
             end
         end
     end
+end
+
+---Parses an `elem_value` from a `choose-elem-button` of type "item" into (name, quality).
+---@param elem_value string|table|nil
+---@return string?, string?
+function P.parse_item_elem_value(elem_value)
+    if not elem_value then return nil, nil end
+    if type(elem_value) == "string" then
+        return elem_value, "normal"
+    end
+    if type(elem_value) == "table" and elem_value.name then
+        return elem_value.name, elem_value.quality or "normal"
+    end
+    return nil, nil
+end
+
+---Translates an item or fluid name using the cached locale store, falling back to the raw name.
+---@param player LuaPlayer
+---@param name string
+---@return string
+function P.translate_item_and_fluid_name(player, name)
+    if py.get_localised_item_or_fluid_name then
+        return py.get_localised_item_or_fluid_name(player, name)
+    end
+    local locale_store = (storage.item_and_fluid_locale or {})[player.locale] or {}
+    return locale_store[name] or name
+end
+
+---Builds the QS interrupt name for an item: "[item=X] LocalizedName count" (with quality if non-normal).
+---@param player LuaPlayer
+---@param item_name string
+---@param quality string
+---@param count number
+---@return string
+function P.build_interrupt_name_from_item_and_count(player, item_name, quality, count)
+    local translated_name = P.translate_item_and_fluid_name(player, item_name)
+    if quality == "normal" then
+        return string.format("[item=%s] %s %d", item_name, translated_name, count)
+    end
+    return string.format("[item=%s,quality=%s] %s %d", item_name, quality, translated_name, count)
+end
+
+---Builds the QS interrupt name for a fluid: "[fluid=X] LocalizedName count".
+---@param player LuaPlayer
+---@param fluid_name string
+---@param count number
+---@return string
+function P.build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
+    local translated_name = P.translate_item_and_fluid_name(player, fluid_name)
+    return string.format("[fluid=%s] %s %d", fluid_name, translated_name, count)
+end
+
+---Looks up or creates the QS interrupt for the given item+quality+count.
+---For newly-created interrupts, populates the `caravan-item-count` condition and a `load-caravan`
+---schedule entry pointing at the outpost on the player's surface that holds the most of that item.
+---@param player LuaPlayer
+---@param item_name string
+---@param quality string
+---@param count number
+---@return string name, boolean is_new, LuaEntity? quick_pick_station
+function P.ensure_item_quick_setup_interrupt(player, item_name, quality, count)
+    local name = P.build_interrupt_name_from_item_and_count(player, item_name, quality, count)
+    local is_new = not storage.interrupts[name]
+
+    if is_new then
+        storage.interrupts[name] = {
+            name = name,
+            conditions = {},
+            conditions_operators = {},
+            schedule = {},
+            inside_interrupt = false,
+        }
+    end
+
+    local interrupt = storage.interrupts[name]
+    local quick_pick_station
+
+    if is_new then
+        local elem_value = quality == "normal" and item_name or {name = item_name, quality = quality}
+        table.insert(
+            interrupt.conditions,
+            P.ensure_item_count {
+                type = "caravan-item-count",
+                localised_name = {"caravan-actions.caravan-item-count", "caravan-item-count"},
+                elem_value = elem_value,
+                item_count = 0,
+                operator = 3,
+            }
+        )
+
+        quick_pick_station = P.find_outpost_with_largest_item_count(player, item_name, quality)
+        if quick_pick_station and quick_pick_station.valid then
+            local load_action = P.ensure_item_count {
+                type = "load-caravan",
+                localised_name = {"caravan-actions.load-caravan", "load-caravan"},
+                elem_value = elem_value,
+                item_count = count,
+            }
+            table.insert(interrupt.schedule, {
+                localised_name = {
+                    "caravan-gui.entity-position",
+                    quick_pick_station.prototype.localised_name,
+                    math.floor(quick_pick_station.position.x),
+                    math.floor(quick_pick_station.position.y),
+                },
+                entity = quick_pick_station,
+                position = quick_pick_station.position,
+                player_index = nil,
+                actions = {load_action},
+            })
+        end
+    end
+
+    return name, is_new, quick_pick_station
 end
 
 --TODO: ensure this is the right location for these

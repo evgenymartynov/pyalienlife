@@ -128,6 +128,7 @@ py.on_event(defines.events.on_configuration_changed, function()
     for _, player in pairs(game.players) do
         translate_all_items_and_fluids(player)
     end
+    storage.outpost_setup = storage.outpost_setup or {}
 end)
 
 py.on_event(defines.events.on_player_created, function(event)

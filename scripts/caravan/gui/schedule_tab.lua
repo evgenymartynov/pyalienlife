@@ -116,9 +116,57 @@ function P.build_interrupt_list(parent, caravan_data)
     parent.add {type = "button", name = "py_caravan_interrupt_add_button", style = "train_schedule_add_station_button", caption = {"caravan-gui.add-interrupt"}, tags = {unit_number = caravan_data.unit_number}}
 end
 
+---Builds the outpost-setup buttons row (one sprite-button per filtered item type plus an Accept button)
+---when the player has selected an outpost via the schedule-tab quick-setup flow.
+---@param parent LuaGuiElement
+---@param caravan_data Caravan
+---@param player_index integer
+local function build_outpost_setup_row(parent, caravan_data, player_index)
+    local setup = storage.outpost_setup and storage.outpost_setup[player_index]
+    if not setup then return end
+    if setup.caravan_unit_number ~= caravan_data.unit_number then
+        storage.outpost_setup[player_index] = nil
+        return
+    end
+    if not setup.outpost or not setup.outpost.valid then
+        storage.outpost_setup[player_index] = nil
+        return
+    end
+
+    local frame = parent.add {type = "frame", name = "py_caravan_outpost_setup_row", style = "subheader_frame", direction = "horizontal"}
+    frame.style.horizontally_stretchable = true
+    local row = frame.add {type = "flow", direction = "horizontal"}
+    row.style.vertical_align = "center"
+    row.style.horizontal_spacing = 4
+
+    for i, item in ipairs(setup.items) do
+        local style = item.enabled and "slot_sized_button" or "slot_sized_button_red"
+        local button = row.add {
+            type = "sprite-button",
+            name = "py_caravan_outpost_setup_item_button_" .. i,
+            style = style,
+            sprite = "item/" .. item.name,
+            number = item.count,
+            tags = {unit_number = caravan_data.unit_number, item_index = i},
+        }
+        button.elem_tooltip = {type = "item", name = item.name}
+    end
+
+    row.add {type = "empty-widget"}.style.horizontally_stretchable = true
+
+    row.add {
+        type = "sprite-button",
+        name = "py_caravan_outpost_setup_accept_button",
+        style = "item_and_count_select_confirm",
+        sprite = "utility/enter",
+        tags = {unit_number = caravan_data.unit_number},
+    }
+end
+
 function P.build_schedule_flow(parent, caravan_data)
     local flow = parent.add {type = "flow", name = "schedule_flow", direction = "vertical"}
     flow.style.vertically_stretchable = true
+    build_outpost_setup_row(flow, caravan_data, parent.player_index)
     P.build_schedule_list(flow, caravan_data) 
     P.build_interrupt_list(flow, caravan_data)
 
@@ -143,7 +191,7 @@ function P.build_schedule_tab(parent, caravan_data)
     schedule_container.style.horizontally_stretchable = true
     schedule_container.style.vertically_stretchable = true
 
-    AddInterruptGui.build_name_quick_set_flow(schedule_container, {unit_number = caravan_data.unit_number})
+    AddInterruptGui.build_name_quick_set_flow(schedule_container, {unit_number = caravan_data.unit_number}, {show_outpost_filter_reader = true})
 
     local schedule_pane = P.build_schedule_pane(schedule_container, caravan_data)
     schedule_pane.style.right_margin = 12
