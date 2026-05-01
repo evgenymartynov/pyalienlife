@@ -133,15 +133,25 @@ local function build_outpost_setup_row(parent, caravan_data, player_index)
         return
     end
 
-    local frame = parent.add {type = "frame", name = "py_caravan_outpost_setup_row", style = "subheader_frame", direction = "horizontal"}
+    local column_count = 8
+    local button_size = 40
+    local v_spacing = 4
+    local num_rows = math.ceil(#setup.items / column_count)
+    local table_height = num_rows * button_size + math.max(0, num_rows - 1) * v_spacing
+    -- 36 = accept button row height, 8 = subheader_frame top+bottom padding
+    local frame_height = table_height + 36 + 8
+
+    local frame = parent.add {type = "frame", name = "py_caravan_outpost_setup_row", style = "subheader_frame", direction = "vertical"}
     frame.style.horizontally_stretchable = true
-    local row = frame.add {type = "flow", direction = "horizontal"}
-    row.style.vertical_align = "center"
-    row.style.horizontal_spacing = 4
+    frame.style.minimal_height = frame_height
+
+    local items_table = frame.add {type = "table", column_count = column_count}
+    items_table.style.horizontal_spacing = 4
+    items_table.style.vertical_spacing = v_spacing
 
     for i, item in ipairs(setup.items) do
         local style = item.enabled and "slot_sized_button" or "slot_sized_button_red"
-        local button = row.add {
+        local button = items_table.add {
             type = "sprite-button",
             name = "py_caravan_outpost_setup_item_button_" .. i,
             style = style,
@@ -152,9 +162,9 @@ local function build_outpost_setup_row(parent, caravan_data, player_index)
         button.elem_tooltip = {type = "item", name = item.name}
     end
 
-    row.add {type = "empty-widget"}.style.horizontally_stretchable = true
-
-    row.add {
+    local bottom_row = frame.add {type = "flow", direction = "horizontal"}
+    bottom_row.add {type = "empty-widget"}.style.horizontally_stretchable = true
+    bottom_row.add {
         type = "sprite-button",
         name = "py_caravan_outpost_setup_accept_button",
         style = "item_and_count_select_confirm",
