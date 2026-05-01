@@ -151,7 +151,7 @@ local function start_outpost_setup(player, entity, caravan_unit_number)
             local item_name = type(filter) == "string" and filter or filter.name
             if item_name then
                 local item_prototype = prototypes.item[item_name]
-                if item_prototype then
+                if item_prototype and item_prototype.type ~= "deconstruction-item" then
                     totals[item_name] = (totals[item_name] or 0) + item_prototype.stack_size
                 end
             end
