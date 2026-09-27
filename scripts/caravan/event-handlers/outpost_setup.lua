@@ -1,4 +1,5 @@
 local CaravanUtils = require "__pyalienlife__/scripts/caravan/utils"
+local QuickSetup = require "__pyalienlife__/scripts/caravan/quick_setup"
 local CaravanGuiComponents = require "__pyalienlife__/scripts/caravan/gui/components"
 
 gui_events[defines.events.on_gui_click]["py_caravan_outpost_setup_item_button_."] = function(event)
@@ -60,7 +61,7 @@ gui_events[defines.events.on_gui_click]["py_caravan_outpost_setup_accept_button"
     local existing_interrupts = table.invert(caravan_data.interrupts)
     for _, item in ipairs(setup.items) do
         if item.enabled then
-            local name, is_new, station = CaravanUtils.ensure_item_quick_setup_interrupt(player, item.name, "normal", item.count)
+            local name, is_new, station = QuickSetup.ensure_item_interrupt(player, item.name, "normal", item.count)
             if not name then
                 player.print {"", "[item=" .. item.name .. "] (no source outpost found)"}
             else

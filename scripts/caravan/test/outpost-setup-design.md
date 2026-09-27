@@ -72,7 +72,7 @@ Discovery hints only; for behavioural detail re-read the referenced functions.
   [gui/schedule_tab.lua](../gui/schedule_tab.lua), called from `build_schedule_flow`.
 - Toggle and Accept handlers, schedule + interrupt creation: 
   [event-handlers/outpost_setup.lua](../event-handlers/outpost_setup.lua).
-- Shared QS helpers used by Accept and the existing single-item QS path: see
-  `Utils.parse_item_elem_value`, `Utils.build_interrupt_name_from_item_and_count`,
-  `Utils.ensure_item_quick_setup_interrupt`, and the outpost-name helpers in
-  [utils.lua](../utils.lua).
+- Shared QS helpers used by Accept and the existing item/fluid QS path: interrupt name
+  builders, source-outpost finders and `ensure_item_interrupt` / `ensure_fluid_interrupt` in
+  [quick_setup.lua](../quick_setup.lua); `Utils.parse_item_elem_value` and the outpost-name
+  predicates in [utils.lua](../utils.lua).
