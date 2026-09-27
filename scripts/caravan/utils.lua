@@ -453,52 +453,42 @@ function P.build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
 end
 
 ---Looks up or creates the QS interrupt for the given item+quality+count.
----For newly-created interrupts, populates the `caravan-item-count` condition and a `load-caravan`
----schedule entry pointing at the outpost on the player's surface that holds the most of that item.
+---Existing interrupts are reused as-is. New interrupts are only created when an outpost on the
+---player's surface holds some of that item; they get a `caravan-item-count` condition and a
+---`load-caravan` schedule entry pointing at the outpost that holds the most of it.
 ---@param player LuaPlayer
 ---@param item_name string
 ---@param quality string
 ---@param count number
----@return string name, boolean is_new, LuaEntity? quick_pick_station
+---@return string? name nil if the interrupt didn't exist and no source outpost was found
+---@return boolean is_new
+---@return LuaEntity? quick_pick_station
 function P.ensure_item_quick_setup_interrupt(player, item_name, quality, count)
     local name = P.build_interrupt_name_from_item_and_count(player, item_name, quality, count)
-    local is_new = not storage.interrupts[name]
-
-    if is_new then
-        storage.interrupts[name] = {
-            name = name,
-            conditions = {},
-            conditions_operators = {},
-            schedule = {},
-            inside_interrupt = false,
-        }
+    if storage.interrupts[name] then
+        return name, false, nil
     end
 
-    local interrupt = storage.interrupts[name]
-    local quick_pick_station
+    local quick_pick_station = P.find_outpost_with_largest_item_count(player, item_name, quality)
+    if not quick_pick_station or not quick_pick_station.valid then
+        return nil, false, nil
+    end
 
-    if is_new then
-        local elem_value = quality == "normal" and item_name or {name = item_name, quality = quality}
-        table.insert(
-            interrupt.conditions,
+    local elem_value = quality == "normal" and item_name or {name = item_name, quality = quality}
+    storage.interrupts[name] = {
+        name = name,
+        conditions = {
             P.ensure_item_count {
                 type = "caravan-item-count",
                 localised_name = {"caravan-actions.caravan-item-count", "caravan-item-count"},
                 elem_value = elem_value,
                 item_count = 0,
                 operator = 3,
-            }
-        )
-
-        quick_pick_station = P.find_outpost_with_largest_item_count(player, item_name, quality)
-        if quick_pick_station and quick_pick_station.valid then
-            local load_action = P.ensure_item_count {
-                type = "load-caravan",
-                localised_name = {"caravan-actions.load-caravan", "load-caravan"},
-                elem_value = elem_value,
-                item_count = count,
-            }
-            table.insert(interrupt.schedule, {
+            },
+        },
+        conditions_operators = {},
+        schedule = {
+            {
                 localised_name = {
                     "caravan-gui.entity-position",
                     quick_pick_station.prototype.localised_name,
@@ -508,12 +498,20 @@ function P.ensure_item_quick_setup_interrupt(player, item_name, quality, count)
                 entity = quick_pick_station,
                 position = quick_pick_station.position,
                 player_index = nil,
-                actions = {load_action},
-            })
-        end
-    end
+                actions = {
+                    P.ensure_item_count {
+                        type = "load-caravan",
+                        localised_name = {"caravan-actions.load-caravan", "load-caravan"},
+                        elem_value = elem_value,
+                        item_count = count,
+                    },
+                },
+            },
+        },
+        inside_interrupt = false,
+    }
 
-    return name, is_new, quick_pick_station
+    return name, true, quick_pick_station
 end
 
 --TODO: ensure this is the right location for these

@@ -249,50 +249,54 @@ gui_events[defines.events.on_gui_click]["py_add_interrupt_name_quick_confirm_but
 
     if from_item_quick then
         new_name, is_new, quick_pick_station = CaravanUtils.ensure_item_quick_setup_interrupt(player, item_name, quality, count)
+        if not new_name then
+            player.play_sound {path = "utility/cannot_build"}
+            return
+        end
     else
         is_new = not storage.interrupts[new_name]
         if is_new then
+            quick_pick_station = CaravanUtils.find_fluid_outpost_with_largest_fluid_amount(player, fluid_name)
+            if not quick_pick_station or not quick_pick_station.valid then
+                player.play_sound {path = "utility/cannot_build"}
+                return
+            end
+
             storage.interrupts[new_name] = {
                 name = new_name,
-                conditions = {},
+                conditions = {
+                    CaravanUtils.ensure_item_count {
+                        type = "caravan-fluid-count",
+                        localised_name = {"caravan-actions.caravan-fluid-count", "caravan-fluid-count"},
+                        elem_value = fluid_name,
+                        item_count = 0,
+                        operator = 3,
+                    },
+                },
                 conditions_operators = {},
-                schedule = {},
+                schedule = {
+                    {
+                        localised_name = {
+                            "caravan-gui.entity-position",
+                            quick_pick_station.prototype.localised_name,
+                            math.floor(quick_pick_station.position.x),
+                            math.floor(quick_pick_station.position.y),
+                        },
+                        entity = quick_pick_station,
+                        position = quick_pick_station.position,
+                        player_index = nil,
+                        actions = {
+                            CaravanUtils.ensure_item_count {
+                                type = "fill-tank-until-caravan-has",
+                                localised_name = {"caravan-actions.fill-tank-until-caravan-has", "fill-tank-until-caravan-has"},
+                                elem_value = fluid_name,
+                                item_count = count,
+                            },
+                        },
+                    },
+                },
                 inside_interrupt = false,
             }
-
-            local interrupt = storage.interrupts[new_name]
-            table.insert(
-                interrupt.conditions,
-                CaravanUtils.ensure_item_count {
-                    type = "caravan-fluid-count",
-                    localised_name = {"caravan-actions.caravan-fluid-count", "caravan-fluid-count"},
-                    elem_value = fluid_name,
-                    item_count = 0,
-                    operator = 3,
-                }
-            )
-
-            quick_pick_station = CaravanUtils.find_fluid_outpost_with_largest_fluid_amount(player, fluid_name)
-            if quick_pick_station and quick_pick_station.valid then
-                local fill_action = CaravanUtils.ensure_item_count {
-                    type = "fill-tank-until-caravan-has",
-                    localised_name = {"caravan-actions.fill-tank-until-caravan-has", "fill-tank-until-caravan-has"},
-                    elem_value = fluid_name,
-                    item_count = count,
-                }
-                table.insert(interrupt.schedule, {
-                    localised_name = {
-                        "caravan-gui.entity-position",
-                        quick_pick_station.prototype.localised_name,
-                        math.floor(quick_pick_station.position.x),
-                        math.floor(quick_pick_station.position.y),
-                    },
-                    entity = quick_pick_station,
-                    position = quick_pick_station.position,
-                    player_index = nil,
-                    actions = {fill_action},
-                })
-            end
         end
     end
 
