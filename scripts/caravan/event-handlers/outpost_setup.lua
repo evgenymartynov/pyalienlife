@@ -61,19 +61,19 @@ gui_events[defines.events.on_gui_click]["py_caravan_outpost_setup_accept_button"
     for _, item in ipairs(setup.items) do
         if item.enabled then
             local name, is_new, station = CaravanUtils.ensure_item_quick_setup_interrupt(player, item.name, "normal", item.count)
-            if not existing_interrupts[name] then
-                table.insert(caravan_data.interrupts, name)
-                existing_interrupts[name] = #caravan_data.interrupts
-            end
-            if is_new then
-                if station and station.valid then
+            if not name then
+                player.print {"", "[item=" .. item.name .. "] (no source outpost found)"}
+            else
+                if not existing_interrupts[name] then
+                    table.insert(caravan_data.interrupts, name)
+                    existing_interrupts[name] = #caravan_data.interrupts
+                end
+                if is_new then
                     player.print {
                         "",
                         "[item=" .. item.name .. "] ",
                         string.format("[gps=%d, %d]", math.floor(station.position.x), math.floor(station.position.y)),
                     }
-                else
-                    player.print {"", "[item=" .. item.name .. "] (no source outpost found)"}
                 end
             end
         end
