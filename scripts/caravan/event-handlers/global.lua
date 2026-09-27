@@ -215,7 +215,7 @@ local function on_carrot_used(player, cursor_position)
         if interrupt_data and entity then
             if entity.operable then storage.make_operable_next_tick[#storage.make_operable_next_tick + 1] = entity end
             entity.operable = false -- Prevents the player from opening the gui of the clicked entity
-            if entity.name == "outpost" or entity.name == "outpost-fluid" or entity.name == "outpost-aerial" or entity.name == "outpost-aerial-fluid" then
+            if Utils.entity_name_is_outpost(entity.name) then
                 local action_id = last_opened.action_id
                 interrupt_data.conditions[action_id].entity = entity
                 interrupt_data.conditions[action_id].localised_name = ""
@@ -395,8 +395,87 @@ py.on_event(defines.events.on_ai_command_completed, function(event)
     end
 end)
 
+---Actions that wait for the outpost to supply the caravan with items, fluid or food.
+---"fill-inventory" and "fill-tank" are deliberately excluded: they are used for intentionally long-running actions.
+local wait_alert_action_types = table.invert {
+    "load-caravan",
+    "unload-target",
+    "store-food",
+    "store-specific-food",
+    "fill-tank-until-caravan-has",
+    "fill-tank-until-target-has",
+}
+
+local fluid_wait_alert_action_types = table.invert {
+    "fill-tank-until-caravan-has",
+    "fill-tank-until-target-has",
+}
+
+---Returns the signal and rich text for what the caravan is waiting on, used as the outpost alert icon.
+---@param action table
+---@return SignalID, string
+local function get_wait_alert_icon(action)
+    if action.type == "store-food" then
+        return {type = "virtual", name = "py-no-food"}, "[virtual-signal=py-no-food]"
+    end
+    if fluid_wait_alert_action_types[action.type] and action.elem_value then
+        return {type = "fluid", name = action.elem_value}, "[fluid=" .. action.elem_value .. "]"
+    end
+    local name, quality = Utils.parse_item_elem_value(action.elem_value)
+    if name then
+        return {type = "item", name = name, quality = quality}, "[item=" .. name .. ",quality=" .. quality .. "]"
+    end
+    return {type = "virtual", name = "py-caravan-waiting"}, "[virtual-signal=py-caravan-waiting]"
+end
+
+---Records the (outpost, icon) pair if the caravan has been waiting at an outpost to be supplied for longer than the configured threshold.
+---@param waiting table<integer, {entity: LuaEntity, alerts: table<string, table>}> outpost unit number -> alerts keyed by icon
+---@param caravan_data Caravan
+---@param action table
+---@param target_entity LuaEntity?
+---@param threshold_ticks integer
+local function check_wait_alert(waiting, caravan_data, action, target_entity, threshold_ticks)
+    if threshold_ticks <= 0 or not caravan_data.action_started_tick then return end
+    if not wait_alert_action_types[action.type] then return end
+    if not target_entity or not target_entity.valid or not Utils.entity_name_is_outpost(target_entity.name) then return end
+    if game.tick - caravan_data.action_started_tick <= threshold_ticks then return end
+
+    local signal, rich_text = get_wait_alert_icon(action)
+    local key = signal.type .. "/" .. signal.name .. "/" .. (signal.quality or "")
+    local outpost_alerts = waiting[target_entity.unit_number]
+    if not outpost_alerts then
+        outpost_alerts = {entity = target_entity, alerts = {}}
+        waiting[target_entity.unit_number] = outpost_alerts
+    end
+    outpost_alerts.alerts[key] = {signal = signal, message = {"caravan-warnings.waiting-too-long", rich_text}}
+end
+
+---Re-sends the alert for every (outpost, icon) pair still waiting, and clears alerts on outposts where a pair has resolved.
+---Alerts can only be reliably removed per entity, so an outpost that lost a pair has all its alerts removed and the remaining ones re-added.
+---@param waiting table<integer, {entity: LuaEntity, alerts: table<string, table>}>
+local function publish_outpost_wait_alerts(waiting)
+    for unit_number, previous in pairs(storage.outpost_wait_alerts or {}) do
+        local current = waiting[unit_number]
+        for key in pairs(previous.alerts) do
+            if not current or not current.alerts[key] then
+                CaravanImpl.remove_alert(previous.entity)
+                break
+            end
+        end
+    end
+
+    for _, outpost_alerts in pairs(waiting) do
+        for _, alert in pairs(outpost_alerts.alerts) do
+            CaravanImpl.add_alert(outpost_alerts.entity, alert)
+        end
+    end
+    storage.outpost_wait_alerts = waiting
+end
+
 py.register_on_nth_tick(60, "update-caravans", "pyal", function()
     local guis_to_update = {}
+    local wait_alert_ticks = settings.global["py-caravan-wait-alert-seconds"].value * 60
+    local waiting_outposts = {}
 
     if not storage.caravan_queue then
         local queue = {}
@@ -459,6 +538,7 @@ py.register_on_nth_tick(60, "update-caravans", "pyal", function()
             end
             guis_to_update[caravan_data.unit_number] = true
         else
+            check_wait_alert(waiting_outposts, caravan_data, action, target_entity, wait_alert_ticks)
             if schedule.entity and schedule.entity.valid then
                 if py.distance_squared(schedule.entity.position, entity.position) > 1000 then
                     CaravanImpl.goto_entity(caravan_data, schedule.entity)
@@ -472,6 +552,8 @@ py.register_on_nth_tick(60, "update-caravans", "pyal", function()
 
         ::continue::
     end
+
+    publish_outpost_wait_alerts(waiting_outposts)
 
     for _, player in pairs(game.connected_players) do
         local gui = CaravanGui.get_gui(player)

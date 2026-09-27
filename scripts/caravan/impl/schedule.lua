@@ -181,6 +181,7 @@ function P.begin_schedule(caravan_data, schedule_id, skip_eating)
 
     caravan_data.schedule_id = schedule_id
     caravan_data.action_id = -1
+    caravan_data.action_started_tick = nil
     if schedule.entity then
         local schedule_entity = schedule.entity
         if schedule_entity.valid and schedule_entity.surface == entity.surface then
@@ -214,6 +215,7 @@ function P.begin_action(caravan_data, action_id)
     end
 
     caravan_data.action_id = action_id
+    caravan_data.action_started_tick = game.tick
 
     if action.type == "time-passed" then
         action.timer = action.wait_time or 5

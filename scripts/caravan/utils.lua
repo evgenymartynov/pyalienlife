@@ -59,6 +59,10 @@ function P.entity_name_is_fluid_outpost(entity_name)
     return entity_name == "outpost-fluid" or entity_name == "outpost-aerial-fluid"
 end
 
+function P.entity_name_is_outpost(entity_name)
+    return P.entity_name_is_item_outpost(entity_name) or P.entity_name_is_fluid_outpost(entity_name)
+end
+
 ---Accepts a condition or action and returns the relevant label
 function P.label_info(schedule_entry)
     if not schedule_entry then return nil, nil, nil end

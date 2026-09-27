@@ -49,6 +49,7 @@ function P.stop_actions(caravan_data)
     caravan_data.action_id = -1
     caravan_data.stored_energy = nil
     caravan_data.arrival_tick = nil
+    caravan_data.action_started_tick = nil
     P.wander(caravan_data)
 end
 
