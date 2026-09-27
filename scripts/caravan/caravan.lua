@@ -47,6 +47,15 @@ py.on_event(py.events.on_init(), function()
     storage.edited_interrupts = storage.edited_interrupts or {}
     storage.gui_locations = storage.gui_locations or {}
     storage.outpost_setup = storage.outpost_setup or {}
+    ---@type table<integer, {entity: LuaEntity, alerts: table<string, table>}> outpost unit number -> active wait alerts keyed by icon
+    storage.outpost_wait_alerts = storage.outpost_wait_alerts or {}
+
+    -- caravans already mid-action before action_started_tick existed start their wait timer now
+    for _, caravan_data in pairs(storage.caravans) do
+        if caravan_data.action_id and caravan_data.action_id > 0 and not caravan_data.action_started_tick then
+            caravan_data.action_started_tick = game.tick
+        end
+    end
 end)
 
 -- clear UI location storage if a player changes their display settings

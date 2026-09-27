@@ -17,5 +17,12 @@ data:extend{
     name = "py-custom-recipe-gui",
     setting_type = "runtime-per-user",
     default_value = true
+  },
+  {
+    type = "int-setting",
+    name = "py-caravan-wait-alert-seconds",
+    setting_type = "runtime-global",
+    default_value = 600,
+    minimum_value = 0
   }
 }

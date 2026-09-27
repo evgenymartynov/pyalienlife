@@ -292,4 +292,13 @@ data:extend {
         hidden = true,
         localised_name = {"virtual-signal-name.destination-destroyed"}
     },
+    {
+        type = "virtual-signal",
+        name = "py-caravan-waiting",
+        icon = "__core__/graphics/icons/alerts/warning-icon.png",
+        subgroup = "virtual-signal",
+        icon_size = 64,
+        hidden = true,
+        localised_name = {"virtual-signal-name.caravan-waiting"}
+    },
 }
