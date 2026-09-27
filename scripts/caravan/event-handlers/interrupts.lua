@@ -1,5 +1,6 @@
 local CaravanImpl = require "__pyalienlife__/scripts/caravan/impl"
 local CaravanUtils = require "__pyalienlife__/scripts/caravan/utils"
+local QuickSetup = require "__pyalienlife__/scripts/caravan/quick_setup"
 local CaravanScheduleGui = require "__pyalienlife__/scripts/caravan/gui/schedule_tab"
 local EditInterruptGui = require "__pyalienlife__/scripts/caravan/gui/edit_interrupt"
 
@@ -225,10 +226,10 @@ gui_events[defines.events.on_gui_click]["py_add_interrupt_name_quick_confirm_but
     local from_item_quick = false
     local from_fluid_quick = false
     if item_name and prototypes.item[item_name] then
-        new_name = CaravanUtils.build_interrupt_name_from_item_and_count(player, item_name, quality, count)
+        new_name = QuickSetup.build_interrupt_name_from_item_and_count(player, item_name, quality, count)
         from_item_quick = true
     elseif fluid_name and prototypes.fluid[fluid_name] then
-        new_name = CaravanUtils.build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
+        new_name = QuickSetup.build_interrupt_name_from_fluid_and_count(player, fluid_name, count)
         from_fluid_quick = true
     else
         player.play_sound {path = "utility/cannot_build"}
@@ -240,89 +241,35 @@ gui_events[defines.events.on_gui_click]["py_add_interrupt_name_quick_confirm_but
         return
     end
 
-    local quick_pick_station
-    local is_new
-
-    if from_item_quick then
-        new_name, is_new, quick_pick_station = CaravanUtils.ensure_item_quick_setup_interrupt(player, item_name, quality, count)
-        if not new_name then
-            player.play_sound {path = "utility/cannot_build"}
-            return
+    local nearest_outpost
+    if from_fluid_quick then
+        if caravan_data.entity and caravan_data.entity.valid then
+            nearest_outpost = QuickSetup.find_nearest_fluid_outpost(caravan_data.entity, player)
         end
-    else
-        is_new = not storage.interrupts[new_name]
-        if is_new then
-            quick_pick_station = CaravanUtils.find_fluid_outpost_with_largest_fluid_amount(player, fluid_name)
-            if not quick_pick_station or not quick_pick_station.valid then
-                player.play_sound {path = "utility/cannot_build"}
-                return
-            end
-
-            storage.interrupts[new_name] = {
-                name = new_name,
-                conditions = {
-                    CaravanUtils.ensure_item_count {
-                        type = "caravan-fluid-count",
-                        localised_name = {"caravan-actions.caravan-fluid-count", "caravan-fluid-count"},
-                        elem_value = fluid_name,
-                        item_count = 0,
-                        operator = 3,
-                    },
-                },
-                conditions_operators = {},
-                schedule = {
-                    {
-                        localised_name = {
-                            "caravan-gui.entity-position",
-                            quick_pick_station.prototype.localised_name,
-                            math.floor(quick_pick_station.position.x),
-                            math.floor(quick_pick_station.position.y),
-                        },
-                        entity = quick_pick_station,
-                        position = quick_pick_station.position,
-                        player_index = nil,
-                        actions = {
-                            CaravanUtils.ensure_item_count {
-                                type = "fill-tank-until-caravan-has",
-                                localised_name = {"caravan-actions.fill-tank-until-caravan-has", "fill-tank-until-caravan-has"},
-                                elem_value = fluid_name,
-                                item_count = count,
-                            },
-                        },
-                    },
-                },
-                inside_interrupt = false,
-            }
+        if not nearest_outpost or not nearest_outpost.valid then
+            player.print {"", "[fluid=" .. fluid_name .. "] (no drop-off fluid outpost found)"}
+            return
         end
     end
 
-    if from_fluid_quick and caravan_data.entity and caravan_data.entity.valid then
-        local nearest_outpost = CaravanUtils.find_nearest_fluid_outpost(caravan_data.entity, player)
-        if nearest_outpost and nearest_outpost.valid then
-            local empty_action = CaravanUtils.ensure_item_count {
-                type = "empty-tank-until-target-has",
-                localised_name = {"caravan-actions.empty-tank-until-target-has", "empty-tank-until-target-has"},
-                elem_value = fluid_name,
-                item_count = count,
-            }
-            local wait_action = CaravanUtils.ensure_item_count {
-                type = "time-passed",
-                localised_name = {"caravan-actions.time-passed", "time-passed"},
-                wait_time = 120,
-            }
-            table.insert(caravan_data.schedule, {
-                localised_name = {
-                    "caravan-gui.entity-position",
-                    nearest_outpost.prototype.localised_name,
-                    math.floor(nearest_outpost.position.x),
-                    math.floor(nearest_outpost.position.y),
-                },
-                entity = nearest_outpost,
-                position = nearest_outpost.position,
-                player_index = nil,
-                actions = {empty_action, wait_action},
-            })
+    local is_new, quick_pick_station
+    if from_item_quick then
+        new_name, is_new, quick_pick_station = QuickSetup.ensure_item_interrupt(player, item_name, quality, count)
+    else
+        new_name, is_new, quick_pick_station = QuickSetup.ensure_fluid_interrupt(player, fluid_name, count)
+    end
+    if not new_name then
+        if from_item_quick then
+            local icon = quality == "normal" and ("[item=" .. item_name .. "]") or ("[item=" .. item_name .. ",quality=" .. quality .. "]")
+            player.print {"", icon, " (no source outpost found)"}
+        else
+            player.print {"", "[fluid=" .. fluid_name .. "] (no source outpost found)"}
         end
+        return
+    end
+
+    if from_fluid_quick then
+        QuickSetup.add_fluid_dropoff(caravan_data, nearest_outpost, fluid_name, count)
     end
 
     table.insert(caravan_data.interrupts, new_name)

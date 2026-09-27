@@ -3,6 +3,7 @@ local CaravanGui = require "__pyalienlife__/scripts/caravan/gui"
 local CaravanGuiComponents = require "__pyalienlife__/scripts/caravan/gui/components"
 local EditInterruptGui = require "__pyalienlife__/scripts/caravan/gui/edit_interrupt"
 local Utils = require "__pyalienlife__/scripts/caravan/utils"
+local QuickSetup = require "__pyalienlife__/scripts/caravan/quick_setup"
 
 local caravan_prototypes = require "__pyalienlife__/scripts/caravan/caravan-prototypes"
 
@@ -138,7 +139,7 @@ local function start_outpost_setup(player, entity, caravan_unit_number)
         return
     end
 
-    local inventory = Utils.try_get_outpost_item_inventory(entity)
+    local inventory = QuickSetup.try_get_outpost_item_inventory(entity)
     if not inventory then
         player.play_sound {path = "utility/cannot_build"}
         return
