@@ -112,6 +112,12 @@ function P.build_interrupt_list(parent, caravan_data)
     frame.style.horizontally_stretchable = true
 
     frame.add {type = "label", style = "subheader_semibold_label", caption = {"caravan-gui.interrupt-header-label"}, tooltip = {"caravan-gui.interrupt-header-tooltip"}}
+    frame.add {type = "empty-widget"}.style.horizontally_stretchable = true
+    local tags = {unit_number = caravan_data.unit_number}
+    frame.add {type = "sprite-button", name = "py_caravan_optimise_interrupt_order_button", style = "train_schedule_action_button", sprite = "tooltip-category-electricity", tooltip = {"caravan-gui.optimise-interrupt-order-tooltip"}, tags = tags}
+    local global_button = frame.add {type = "button", name = "py_caravan_optimise_all_interrupt_orders_button", style = "train_schedule_action_button", caption = "[img=tooltip-category-electricity][img=tooltip-category-electricity]", tooltip = {"caravan-gui.optimise-all-interrupt-orders-tooltip"}, tags = tags}
+    global_button.style.width = 44
+    global_button.style.padding = 0
     for i = 1, #caravan_data.interrupts do
         local flow = parent.add {type = "flow", direction = "vertical"}
 
