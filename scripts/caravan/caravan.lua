@@ -6,6 +6,7 @@ require "event-handlers/action"
 require "event-handlers/subheader_buttons"
 require "event-handlers/interrupts"
 require "event-handlers/outpost_setup"
+require "optimize"
 
 require "manager"
 
