@@ -118,8 +118,8 @@ function P.instantiate_caravan(entity)
 
     if prototype.favorite_foods and prototype.fuel_size then
         caravan_data.fuel_inventory = game.create_inventory(prototype.fuel_size)
-        caravan_data.fuel_bar = 0
-        caravan_data.last_eaten_fuel_value = 1
+        caravan_data.fuel_bar = 2
+        caravan_data.last_eaten_fuel_value = 2
     end
 
     if prototype.inventory_size then
